@@ -37,6 +37,7 @@ import { getStyleDimension, isSegmentVisible } from '../../utils/utils';
 export interface RouteConfig {
   style: StyleConfig;
   arrow?: 0 | 1 | -1;
+  showInterEntityTransitions?: boolean;
 }
 
 const defaultOptions: RouteConfig = {
@@ -46,6 +47,7 @@ const defaultOptions: RouteConfig = {
     lineWidth: 2,
   },
   arrow: 0,
+  showInterEntityTransitions: true,
 };
 
 export const ROUTE_LAYER_ID = 'route';
@@ -125,6 +127,10 @@ export const routeLayer: MapLayerRegistryItem<RouteConfig> = {
             for (let i = 0; i < coordinates.length - 1; i++) {
               const segmentStartCoords = coordinates[startIndex];
               const segmentEndCoords = coordinates[i + 1];
+
+              const entityStart = dims.text?.get(startIndex);
+              const entityEnd = dims.text?.get(i + 1);
+
               const color1 = tinycolor(
                 theme.visualization.getColorByName((dims.color && dims.color.get(startIndex)) ?? style.base.color)
               )
@@ -157,12 +163,20 @@ export const routeLayer: MapLayerRegistryItem<RouteConfig> = {
                   flowStyle.setArrowSize((arrowSize1 ?? 0) * 1.5);
                 }
               }
-              // Only render segment if change in pixel coordinates is significant enough
-              if (isSegmentVisible(map, pixelTolerance, segmentStartCoords, segmentEndCoords)) {
-                const LS = new LineString([segmentStartCoords, segmentEndCoords]);
-                flowStyle.setGeometry(LS);
-                styles.push(flowStyle);
-                startIndex = i + 1; // Because a segment was created, move onto the next one
+
+              // Only draw segment if entity matches, or if toggle is enabled
+              const allowTransition = config.showInterEntityTransitions || entityStart === entityEnd;
+              if (allowTransition) {
+                // Only render segment if change in pixel coordinates is significant enough
+                if (isSegmentVisible(map, pixelTolerance, segmentStartCoords, segmentEndCoords)) {
+                  const LS = new LineString([segmentStartCoords, segmentEndCoords]);
+                  flowStyle.setGeometry(LS);
+                  styles.push(flowStyle);
+                  startIndex = i + 1; // Because a segment was created, move onto the next one
+                }
+              } else {
+                // Do not draw segment between different entities
+                startIndex = i + 1;
               }
             }
             // If no segments created, render a single point
@@ -359,6 +373,12 @@ export const routeLayer: MapLayerRegistryItem<RouteConfig> = {
               ],
             },
             defaultValue: defaultOptions.arrow,
+          })
+          .addBooleanSwitch({
+            path: 'config.showInterEntityTransitions',
+            name: 'Show Inter-entity Transitions',
+            description: 'If enabled, lines connecting points will different text values will be visible.',
+            defaultValue: defaultOptions.showInterEntityTransitions,
           });
       },
     };
